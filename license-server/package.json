@@ -4,7 +4,7 @@
   "private": true,
   "description": "RentBook license server: activation codes + device limits + Creem webhook fulfillment",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=23.4"
   },
   "scripts": {
     "start": "node server.js",
@@ -12,6 +12,6 @@
     "gen-key": "node keys.js"
   },
   "dependencies": {
-    "@libsql/client": "^0.18.0"
+    "postgres": "^3.4.5"
   }
 }

@@ -1,14 +1,15 @@
 // ============================================================
-//  server.js — AmzInsight 授权服务（激活码 + 服务端额度校验）
-//  零第三方依赖：node:http + node:sqlite（要求 Node >= 22.5）
+//  server.js — RentBook 授权服务（激活码 + 设备数限制 + Creem 自动发码）
+//  依赖：postgres（云库）+ node:sqlite（本地文件回退）
 //
-//  db.js 数据层支持 Turso 云数据库（libSQL）与本地 SQLite 文件双模式：
-//  配置 TURSO_DATABASE_URL + TURSO_AUTH_TOKEN 走云库（容器重启数据不丢），
-//  否则用 DB_PATH 本地文件（适合本机开发）。
+//  db.js 数据层支持 Postgres（Supabase）与本地 SQLite 文件双模式：
+//  配置 DATABASE_URL 走云库（容器重启数据不丢），
+//  否则用 DB_PATH 本地文件（适合本机开发；要求 Node >= 23.4）
 //
 //  环境变量：
 //    PORT         监听端口，默认 8787；设为 0 表示随机端口（测试用）
-//    DB_PATH      SQLite 文件路径，默认 ./amzinsight.db
+//    DB_PATH      SQLite 文件路径，默认 ./amzinsight.db（仅本地文件模式）
+//    DATABASE_URL Postgres 连接串（Supabase Transaction Pooler，6543 端口）
 //    ADMIN_TOKEN  管理接口口令（必填，长随机串）
 //    TRIAL_LIMIT  免费试用次数，默认 3
 //    RATE_LIMIT   每 IP 每分钟请求数上限，默认 60
@@ -36,9 +37,9 @@ const TRIAL_LIMIT = Math.max(0, parseInt(process.env.TRIAL_LIMIT || '3', 10));
 const RATE_LIMIT  = Math.max(1, parseInt(process.env.RATE_LIMIT || '60', 10));
 // Creem webhook 验签密钥（Dashboard > Developers > Webhook 页获取；不配置则自动发码不可用）
 const CREEM_WEBHOOK_SECRET = process.env.CREEM_WEBHOOK_SECRET || '';
-// Turso 云数据库：配置了就走云库（数据持久不随容器重启丢失），否则退回本地 SQLite 文件
-const TURSO_DATABASE_URL = process.env.TURSO_DATABASE_URL || '';
-const TURSO_AUTH_TOKEN   = process.env.TURSO_AUTH_TOKEN || '';
+// Postgres 云数据库：配置了 DATABASE_URL 就走云库（数据持久不随容器重启丢失），
+// 否则退回 node:sqlite 本地文件
+const DATABASE_URL = process.env.DATABASE_URL || '';
 
 if (!ADMIN_TOKEN) {
   console.error('[启动失败] 必须设置 ADMIN_TOKEN 环境变量（管理接口口令，请用长随机串）');
@@ -46,9 +47,9 @@ if (!ADMIN_TOKEN) {
 }
 
 const store = new Store(
-  TURSO_DATABASE_URL
-    ? { url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN || undefined }
-    : { url: 'file:' + DB_PATH.replace(/\\/g, '/') }
+  DATABASE_URL
+    ? { url: DATABASE_URL }
+    : { file: DB_PATH.replace(/\\/g, '/') }
 );
 
 // ── 简易固定窗口限流（单进程内存版，够用；多实例部署需换 Redis）──
