@@ -1,0 +1,17 @@
+{
+  "name": "rentbook-license-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RentBook license server: activation codes + device limits + Creem webhook fulfillment",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/smoke.test.js",
+    "gen-key": "node keys.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0"
+  }
+}

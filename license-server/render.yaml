@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: rentbook-license-server
+    runtime: node
+    plan: free             # 激活码持久性由 Turso 云数据库保证（免费档容器无持久盘）
+    rootDir: license-server
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: ADMIN_TOKEN
+        generateValue: true   # Render 自动生成随机口令，部署后在控制台查看
+      - key: TURSO_DATABASE_URL
+        syncValue: libsql://你的数据库名.turso.io   # Turso 控制台获取（免费档够用）
+      - key: TURSO_AUTH_TOKEN
+        syncValue: 你的Turso数据库令牌               # Turso 控制台获取
+      - key: CREEM_WEBHOOK_SECRET
+        generateValue: true   # 同值填到 Creem 后台 webhook 设置
+      - key: TRIAL_LIMIT
+        value: "3"
+      - key: RATE_LIMIT
+        value: "60"

@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RentBook — local-first rent & expense ledger for small landlords</title>
+<meta name="description" content="Rent ledger, expense log and Schedule E-ready tax summary for landlords with a handful of units. No account, no cloud, no subscription.">
+<style>
+  :root {
+    --ink: #1c1917; --muted: #78716c; --line: #e7e5e4; --bg: #fafaf9; --card: #fff;
+    --green: #15803d; --green-bg: #dcfce7; --amber: #b45309; --amber-bg: #fef3c7;
+    --red: #b91c1c; --red-bg: #fee2e2; --blue: #1d4ed8; --blue-bg: #dbeafe;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.6 system-ui, "Segoe UI", sans-serif; }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 10px 20px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 17px; margin: 0; }
+  header h1 span { color: var(--muted); font-weight: 400; font-size: 13px; }
+  nav { display: flex; gap: 2px; flex-wrap: wrap; }
+  nav button { border: none; background: transparent; padding: 8px 13px; border-radius: 8px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; }
+  nav button:hover { background: #f0efee; color: var(--ink); }
+  nav button.on { background: #1c1917; color: #fff; }
+  #saveState { margin-left: auto; font-size: 12px; color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 18px 20px 60px; }
+  section[hidden] { display: none; }
+  h2 { font-size: 19px; margin: 4px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: 13.5px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat .n { font-size: 24px; font-weight: 700; margin-top: 2px; }
+  .stat .l { font-size: 12.5px; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); border-bottom: 2px solid var(--line); padding: 6px 8px; }
+  td { border-bottom: 1px solid var(--line); padding: 8px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 10px; }
+  .chip.paid { color: var(--green); background: var(--green-bg); }
+  .chip.partial { color: var(--amber); background: var(--amber-bg); }
+  .chip.late { color: var(--red); background: var(--red-bg); }
+  .chip.due { color: var(--blue); background: var(--blue-bg); }
+  button { cursor: pointer; border: none; border-radius: 8px; padding: 8px 15px; font: inherit; font-weight: 600; background: #1c1917; color: #fff; }
+  button:hover { background: #292524; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
+  button.ghost:hover { background: #f0efee; }
+  button.danger { background: var(--red-bg); color: var(--red); }
+  button.danger:hover { background: #fecaca; }
+  button.mini { padding: 3px 10px; font-size: 12.5px; border-radius: 6px; }
+  input, select, textarea { font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: #fff; color: var(--ink); }
+  input:focus, select:focus { outline: 2px solid #d6d3d1; }
+  label { font-size: 12.5px; font-weight: 600; color: #44403c; display: block; margin-bottom: 3px; }
+  .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+  .row-form { background: #f5f5f4; border: 1px dashed #d6d3d1; border-radius: 10px; padding: 10px; margin: 8px 0 4px; display: none; }
+  .row-form.open { display: block; }
+  .total-row td { font-weight: 700; border-top: 2px solid #44403c; }
+  .empty { color: var(--muted); padding: 18px 0; text-align: center; }
+  .note { font-size: 12.5px; color: var(--muted); }
+  .mt { margin-top: 14px; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar label { margin: 0; }
+  a.dl { color: var(--blue); font-size: 13px; }
+  .modal-wrap { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal { background: var(--card); border-radius: 14px; max-width: 470px; width: 100%; padding: 22px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .modal h3 { margin: 0 0 8px; font-size: 17px; }
+  .modal .pitch { color: var(--muted); font-size: 13.5px; margin: 0 0 12px; }
+  .modal a { text-decoration: none; }
+  .badge-pro { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .5px; color: #a16207; background: var(--amber-bg); border-radius: 6px; padding: 1px 7px; vertical-align: middle; }
+  .form-msg { font-size: 13px; margin-top: 8px; }
+  .form-msg.err { color: var(--red); } .form-msg.ok { color: var(--green); }
+  .warn-note { background: var(--amber-bg); color: var(--amber); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
+  @media print {
+    header, nav, .noprint, .sub, h2 .noprint { display: none !important; }
+    body { background: #fff; }
+    main { padding: 0; max-width: none; }
+    section[hidden] { display: none; }
+    .card { border: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏠 RentBook <span>· local-first ledger for small landlords</span> <span id="proBadge"></span></h1>
+  <nav id="nav"></nav>
+  <div id="saveState"></div>
+</header>
+<main>
+  <section id="tab-dashboard"></section>
+  <section id="tab-rent" hidden></section>
+  <section id="tab-expenses" hidden></section>
+  <section id="tab-units" hidden></section>
+  <section id="tab-reports" hidden></section>
+  <section id="tab-data" hidden></section>
+</main>
+
+<script>
+"use strict";
+/* ================= constants & state ================= */
+const STORE_KEY = "rentbook.v1";
+const TABS = [
+  ["dashboard", "Dashboard"], ["rent", "Rent"], ["expenses", "Expenses"],
+  ["units", "Properties & Tenants"], ["reports", "Tax Report"], ["data", "Data"],
+];
+// IRS Form 1040 Schedule E, Part I expense lines (minus depreciation, reported via form 4562)
+const SCHEDULE_E = [
+  "Advertising", "Auto and travel", "Cleaning and maintenance", "Commissions",
+  "Insurance", "Legal and other professional fees", "Management fees",
+  "Mortgage interest paid to banks, etc.", "Other interest", "Repairs",
+  "Supplies", "Taxes", "Utilities", "Other (list)",
+];
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+/* ================= licensing =================
+ * 免费 3 单元；激活码（一次性买断）解锁 Pro。
+ * 激活只联网一次（复用 amz-insight 授权服务器，CORS 已放开）；
+ * 记账数据永远只存在本地，离线时保留已激活状态。 */
+const LICENSE = {
+  server: "",                       // 上线前替换为你的授权服务器部署地址
+  buyUrl: "",    // Creem 商品创建后替换为真实支付链接
+  maxFreeUnits: 3,
+};
+const LICENSE_READY = !!LICENSE.server;                  // server/buyUrl 未配置时前端优雅降级
+const BUY_READY = !!LICENSE.buyUrl && !LICENSE.buyUrl.includes("REPLACE-ME");
+let licenseNotice = "";
+function isPro() { return !!(state.license && state.license.key); }
+function getInstallId() {
+  let id = localStorage.getItem("rentbook.installId");
+  if (!id) { id = crypto.randomUUID ? crypto.randomUUID() : "install-" + Date.now() + "-" + Math.random().toString(36).slice(2); localStorage.setItem("rentbook.installId", id); }
+  return id;
+}
+function updateProBadge() {
+  const el = document.getElementById("proBadge");
+  if (el) el.innerHTML = isPro() ? '<span class="badge-pro">PRO</span>' : "";
+}
+async function activateLicense(code) {
+  if (!LICENSE_READY) return { ok: false, msg: "License activation isn't set up yet. Your free plan still works fully." };
+  code = String(code || "").trim().toUpperCase();
+  if (!/^AMZ(-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}){3}$/.test(code)) {
+    return { ok: false, msg: "Codes look like AMZ-XXXX-XXXX-XXXX — double-check the characters." };
+  }
+  try {
+    const r = await fetch(LICENSE.server + "/v1/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey: code, installId: getInstallId() }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.ok) {
+      state.license = { key: code, installId: getInstallId(), activatedAt: new Date().toISOString() };
+      licenseNotice = "";
+      save(); updateProBadge();
+      return { ok: true, msg: "Pro activated — thank you! Everything on this device is unlocked." };
+    }
+    const msgs = {
+      key_not_found: "That code doesn't exist — check for typos.",
+      revoked: "This code has been revoked (refunded?).",
+      device_limit: "This code is already used on the maximum number of devices.",
+    };
+    return { ok: false, msg: msgs[data.error] || `Activation failed (HTTP ${r.status}).` };
+  } catch {
+    return { ok: false, msg: "Couldn't reach the license server. Activation needs internet once; your ledger itself works fully offline." };
+  }
+}
+async function revalidateLicense() {
+  try {
+    const r = await fetch(LICENSE.server + "/v1/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey: state.license.key, installId: state.license.installId || getInstallId() }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (data.mode !== "pro") {
+      state.license = null;
+      licenseNotice = "Your Pro license is no longer active (refunded or revoked). Your data is untouched — it never leaves this browser.";
+      save(); updateProBadge(); render();
+    }
+  } catch { /* 离线宽限：保留本地激活状态 */ }
+}
+function freePlanBanner() {
+  const over = state.units.length > LICENSE.maxFreeUnits;
+  return `<div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+      <b>Free plan · ${state.units.length}/${LICENSE.maxFreeUnits} units</b>
+      <div class="note">${over
+        ? `This notebook holds ${state.units.length} units — everything recorded stays fully usable. Pro just unlocks adding more.`
+        : "Unlimited rent & expense tracking on these units, forever. Pro only adds more units, multi-year reports and tenant PDF statements."}</div>
+    </div>
+    <button data-upgrade="1">Upgrade to Pro · $24</button>
+  </div>`;
+}
+function showUpgrade() {
+  const wrap = document.createElement("div");
+  wrap.className = "modal-wrap";
+  wrap.innerHTML = `
+    <div class="modal">
+      <h3>RentBook Pro</h3>
+      <p class="pitch">You've filled the free plan (${LICENSE.maxFreeUnits} units). Pro lifts the unit limit, unlocks multi-year comparison and tenant PDF statements. One-time payment — no subscription — and your ledger data still never leaves this browser.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        ${BUY_READY ? `<a href="${LICENSE.buyUrl}" target="_blank" rel="noopener"><button>Buy a license · $24</button></a>` : `<span class="chip due">Pro checkout is coming soon — the free plan stays free forever</span>`}
+        <button class="ghost" data-close="1">I'll stay on free</button>
+      </div>
+      <label>Already have a code? Activate here</label>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <input id="licInput" placeholder="AMZ-XXXX-XXXX-XXXX" style="flex:1">
+        <button id="licGo">Activate</button>
+      </div>
+      <div class="form-msg" id="licMsg"></div>
+    </div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener("click", (e) => { if (e.target === wrap || e.target.closest("[data-close]")) wrap.remove(); });
+  wrap.querySelector("#licGo").addEventListener("click", async () => {
+    const msg = wrap.querySelector("#licMsg");
+    msg.className = "form-msg"; msg.textContent = "Contacting license server…";
+    const res = await activateLicense(wrap.querySelector("#licInput").value);
+    msg.className = "form-msg " + (res.ok ? "ok" : "err");
+    msg.textContent = res.msg;
+    if (res.ok) setTimeout(() => { wrap.remove(); render(); }, 700);
+  });
+  wrap.querySelector("#licInput").focus();
+}
+
+let state = load() || seed();
+let currentTab = "dashboard";
+let rentMonth = todayISO().slice(0, 7); // 本地时区的当前月（函数声明提升，先于定义处使用是安全的）
+let expenseFilter = { year: String(new Date().getFullYear()), unit: "", category: "" };
+let reportYear = String(new Date().getFullYear());
+let openPayForm = null; // unitId whose payment form is open
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || !Array.isArray(s.units) || !Array.isArray(s.payments) || !Array.isArray(s.expenses)) return null;
+    if (!s.license || !s.license.key) s.license = null;
+    return s;
+  } catch { return null; }
+}
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  const el = document.getElementById("saveState");
+  if (el) el.textContent = "Saved locally · " + new Date().toLocaleTimeString();
+}
+function uid() { return crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(36).slice(2); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function money(n) { return (state.currency || "$") + (Math.round(n * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function unitById(id) { return state.units.find((u) => u.id === id); }
+function todayISO() {
+  // 本地时区的 YYYY-MM-DD（toISOString 是 UTC，会在美国用户的傍晚翻到“明天”）
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function monthLabel(ym) { const [y, m] = ym.split("-").map(Number); return MONTH_NAMES[m - 1] + " " + y; }
+function parseAmount(v) { const n = parseFloat(String(v).replace(/[$,\s]/g, "")); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null; }
+
+/* ================= computations ================= */
+function rentPaid(unitId, ym) {
+  return state.payments.filter((p) => p.unitId === unitId && p.month === ym && p.kind === "rent")
+    .reduce((s, p) => s + p.amount, 0);
+}
+function rentStatus(u, ym) {
+  const paid = rentPaid(u.id, ym);
+  const [y, m] = ym.split("-").map(Number);
+  const now = new Date();
+  const dueDate = new Date(y, m - 1, Math.min(u.dueDay || 1, 28), 23, 59, 59);
+  // 未来月份不判逾期；当月按缴租日，历史月份一律视为已逾期
+  const isFutureMonth = y > now.getFullYear() || (y === now.getFullYear() && m - 1 > now.getMonth());
+  const overdue = !isFutureMonth && now > dueDate;
+  let status, cls;
+  if (u.rent <= 0 && paid <= 0) { status = "Vacant"; cls = "due"; }
+  else if (paid >= u.rent && u.rent > 0) { status = "Paid " + fmtMoney(rentPaid(u.id, ym)); cls = "paid"; }
+  else if (paid > 0) { status = `Partial ${fmtMoney(paid)} / ${fmtMoney(u.rent)}`; cls = "partial"; }
+  else if (overdue) { status = "LATE"; cls = "late"; }
+  else { status = "Due " + fmtMoney(u.rent); cls = "due"; }
+  return { paid, status, cls, overdue: cls === "late" };
+}
+function fmtMoney(n) { return money(n); }
+function paymentsIn(year) { return state.payments.filter((p) => p.date.startsWith(year + "-")); }
+function expensesIn(year) { return state.expenses.filter((e) => e.date.startsWith(year + "-")); }
+function reportFor(year) {
+  // 列 = 各单元 + 一个“Shared”列（承接未分配到单元的支出，如整栋的房产税）
+  const cols = [...state.units.map((u) => ({ id: u.id, name: u.name })), { id: "", name: "Shared" }];
+  const colIds = cols.map((c) => c.id);
+  const sumBy = (filterFn) => colIds.map((id) => state.payments.filter((p) => p.unitId === id && p.kind === filterFn && p.date.startsWith(year + "-")).reduce((s, p) => s + p.amount, 0));
+  const rentRow = { label: "Rents received", values: sumBy("rent") };
+  const feeRow = { label: "Late fees & other income", values: colIds.map((id) => state.payments.filter((p) => p.unitId === id && p.kind !== "rent" && p.date.startsWith(year + "-")).reduce((s, p) => s + p.amount, 0)) };
+  const rows = [rentRow, feeRow];
+  rows.push(...SCHEDULE_E.map((cat) => ({
+    label: cat,
+    expense: true,
+    values: colIds.map((id) => state.expenses.filter((e) => e.unitId === id && e.category === cat && e.date.startsWith(year + "-")).reduce((s, e) => s + e.amount, 0)),
+  })));
+  const colTotals = cols.map((_, i) => rows.reduce((s, r) => s + (r.expense ? -r.values[i] : r.values[i]), 0));
+  const allTotal = colTotals.reduce((s, v) => s + v, 0);
+  const incomeTotal = cols.map((_, i) => rentRow.values[i] + feeRow.values[i]);
+  const expenseTotal = cols.map((_, i) => rows.filter((r) => r.expense).reduce((s, r) => s + r.values[i], 0));
+  return { rows, cols, colTotals, allTotal, incomeTotal, expenseTotal, year };
+}
+
+/* ================= demo data ================= */
+function seed() {
+  const u1 = { id: uid(), name: "Maple St · Apt 1", address: "12 Maple St, Springfield", tenant: "J. Alvarez", rent: 1200, dueDay: 1 };
+  const u2 = { id: uid(), name: "Maple St · Apt 2", address: "12 Maple St, Springfield", tenant: "T. Nguyen", rent: 1150, dueDay: 1 };
+  const u3 = { id: uid(), name: "Oak Ave House", address: "88 Oak Ave, Springfield", tenant: "K. Patel", rent: 1850, dueDay: 5 };
+  const y = new Date().getFullYear();
+  const ym = (m) => `${y}-${String(m).padStart(2, "0")}`;
+  const pay = (unitId, month, amount, day, kind = "rent", note = "") => ({ id: uid(), unitId, month, kind, amount, date: `${month}-${String(day).padStart(2, "0")}`, method: "Bank transfer", note });
+  return {
+    version: 1, currency: "$", license: null,
+    units: [u1, u2, u3],
+    payments: [
+      pay(u1.id, ym(7), 1200, 1), pay(u1.id, ym(8), 1200, 1), pay(u1.id, ym(9), 1200, 1),
+      pay(u2.id, ym(7), 1150, 2), pay(u2.id, ym(8), 575, 3, "rent", "half up front"),
+      pay(u3.id, ym(7), 1850, 5), pay(u3.id, ym(8), 1850, 6),
+      pay(u2.id, ym(8), 50, 12, "fee", "late fee"),
+      pay(u3.id, ym(7), 200, 20, "other", "lease buyout"),
+    ],
+    expenses: [
+      { id: uid(), unitId: u1.id, date: `${y}-07-15`, category: "Repairs", payee: "Ace Plumbing", amount: 180, note: "kitchen sink" },
+      { id: uid(), unitId: u1.id, date: `${y}-08-02`, category: "Cleaning and maintenance", payee: "MaidPro", amount: 120, note: "turnover clean" },
+      { id: uid(), unitId: u2.id, date: `${y}-08-10`, category: "Supplies", payee: "Home Depot", amount: 74.5, note: "smoke detector batteries" },
+      { id: uid(), unitId: u3.id, date: `${y}-07-01`, category: "Insurance", payee: "State Farm", amount: 1450, note: "annual premium" },
+      { id: uid(), unitId: u3.id, date: `${y}-08-20`, category: "Other (list)", payee: "GreenCut", amount: 45, note: "lawn care" },
+      { id: uid(), unitId: "", date: `${y}-08-01`, category: "Taxes", payee: "County Assessor", amount: 980, note: "half-year property tax (shared)" },
+      { id: uid(), unitId: u1.id, date: `${y}-09-03`, category: "Utilities", payee: "City Water", amount: 63.2, note: "" },
+    ],
+  };
+}
+
+/* ================= shared snippets ================= */
+function unitOptions(selected, shared) {
+  return (shared ? `<option value="">— shared / whole property —</option>` : `<option value="">— select unit —</option>`) +
+    state.units.map((u) => `<option value="${u.id}" ${u.id === selected ? "selected" : ""}>${esc(u.name)}</option>`).join("");
+}
+function categoryOptions(selected) {
+  return SCHEDULE_E.map((c) => `<option ${c === selected ? "selected" : ""}>${esc(c)}</option>`).join("");
+}
+
+/* ================= dashboard ================= */
+function renderDashboard() {
+  const ym = rentMonth;
+  const expected = state.units.reduce((s, u) => s + u.rent, 0);
+  const collected = state.units.reduce((s, u) => s + rentPaid(u.id, ym), 0);
+  const overdue = state.units.filter((u) => rentStatus(u, ym).overdue);
+  const year = ym.slice(0, 4);
+  const inc = paymentsIn(year).reduce((s, p) => s + p.amount, 0);
+  const exp = expensesIn(year).reduce((s, e) => s + e.amount, 0);
+  document.getElementById("tab-dashboard").innerHTML = `
+    <h2>Dashboard</h2>
+    <p class="sub">One glance: are you collected up, and where the year stands.</p>
+    <div class="stats">
+      <div class="stat"><div class="l">Collected · ${esc(monthLabel(ym))}</div><div class="n">${money(collected)}</div><div class="l">of ${money(expected)} expected · ${expected ? Math.round((collected / expected) * 100) : 0}%</div></div>
+      <div class="stat"><div class="l">Outstanding / late</div><div class="n" style="color:${overdue.length ? "var(--red)" : "var(--green)"}">${overdue.length}</div><div class="l">${overdue.length ? esc(overdue.map((u) => u.name).join(", ")) : "nothing overdue"}</div></div>
+      <div class="stat"><div class="l">Income · YTD ${esc(year)}</div><div class="n">${money(inc)}</div><div class="l">rent, fees & other</div></div>
+      <div class="stat"><div class="l">Expenses · YTD ${esc(year)}</div><div class="n">${money(exp)}</div><div class="l">${esc(year)} net: <b>${money(inc - exp)}</b></div></div>
+    </div>
+    <div class="card mt">
+      <b>This month at a glance — ${esc(monthLabel(ym))}</b>
+      <table class="mt">${state.units.map((u) => { const st = rentStatus(u, ym); return `<tr><td><b>${esc(u.name)}</b><div class="note">${esc(u.tenant || "vacant")}</div></td><td class="num">${money(u.rent)}</td><td class="num"><span class="chip ${st.cls}">${esc(st.status)}</span></td></tr>`; }).join("")}</table>
+    </div>`;
+}
+
+/* ================= rent tab ================= */
+function renderRent() {
+  const ym = rentMonth;
+  // 把日期约束在台账月内：防止 month 与 date 口径分裂（台账按 month、报税按 date 统计）
+  const [ry, rm] = ym.split("-").map(Number);
+  const daysInMonth = new Date(ry, rm, 0).getDate();
+  const prefDate = todayISO().slice(0, 7) === ym ? todayISO() : `${ym}-01`;
+  const rows = state.units.map((u) => {
+    const st = rentStatus(u, ym);
+    const pays = state.payments.filter((p) => p.unitId === u.id && p.month === ym);
+    const payChips = pays.map((p) => `<span class="chip ${p.kind === "rent" ? "paid" : "partial"}" title="${esc(p.note || "")}">${esc(p.kind)} ${money(p.amount)} · ${esc(p.date.slice(5))} <button class="mini ghost" data-del-pay="${p.id}">×</button></span>`).join(" ");
+    const form = openPayForm === u.id ? `
+      <div class="row-form open" data-form="${u.id}">
+        <div class="grid-form">
+          <div><label>Amount</label><input type="number" step="0.01" min="0" value="${pays.filter((p) => p.kind === "rent").reduce((s, p) => s + p.amount, 0) ? Math.max(0, u.rent - pays.filter((p) => p.kind === "rent").reduce((s, p) => s + p.amount, 0)) : u.rent}" data-f="amount"></div>
+          <div><label>Date</label><input type="date" min="${ym}-01" max="${ym}-${daysInMonth}" value="${prefDate}" data-f="date"></div>
+          <div><label>Kind</label><select data-f="kind"><option value="rent">rent</option><option value="fee">late fee</option><option value="other">other income</option></select></div>
+          <div><label>Method</label><input type="text" placeholder="cash / bank / Zelle" data-f="method"></div>
+          <div><label>Note</label><input type="text" data-f="note"></div>
+          <div><button data-save-pay="${u.id}">Save</button> <button class="ghost" data-cancel-pay="1">Cancel</button></div>
+        </div>
+      </div>` : "";
+    return `<tr>
+      <td><b>${esc(u.name)}</b><div class="note">${esc(u.tenant || "vacant")} · due day ${u.dueDay}</div></td>
+      <td class="num">${money(u.rent)}</td>
+      <td class="num"><span class="chip ${st.cls}">${esc(st.status)}</span></td>
+      <td>${payChips || '<span class="note">no payments recorded</span>'}</td>
+      <td class="num noprint"><button class="mini" data-pay="${u.id}">＋ Record payment</button></td>
+    </tr>${form}`;
+  }).join("");
+  document.getElementById("tab-rent").innerHTML = `
+    <h2>Rent ledger <span class="noprint" style="font-weight:400;font-size:14px;color:var(--muted)">— ${esc(monthLabel(ym))}</span></h2>
+    <p class="sub noprint">Tap “Record payment” on a unit to log rent, a late fee or other income. Partial payments stay flagged until the full rent is in.</p>
+    <div class="toolbar noprint"><label>Month</label><input type="month" id="monthPick" value="${ym}"></div>
+    <div class="card"><table>
+      <tr><th>Unit</th><th class="num">Rent</th><th class="num">Status</th><th>Payments this month</th><th class="num noprint"></th></tr>
+      ${rows || `<tr><td colspan="5" class="empty">No properties yet — add one in “Properties & Tenants”.</td></tr>`}
+    </table></div>`;
+  const mp = document.getElementById("monthPick");
+  mp.addEventListener("change", () => { rentMonth = /^\d{4}-\d{2}$/.test(mp.value) ? mp.value : rentMonth; openPayForm = null; render(); });
+}
+
+/* ================= expenses tab ================= */
+function renderExpenses() {
+  const list = state.expenses
+    .filter((e) => (!expenseFilter.year || e.date.startsWith(expenseFilter.year + "-"))
+      && (!expenseFilter.unit || e.unitId === expenseFilter.unit)
+      && (!expenseFilter.category || e.category === expenseFilter.category))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const total = list.reduce((s, e) => s + e.amount, 0);
+  const years = [...new Set(state.expenses.map((e) => e.date.slice(0, 4)))].sort().reverse();
+  document.getElementById("tab-expenses").innerHTML = `
+    <h2>Expenses</h2>
+    <p class="sub">Every dollar against a unit and a Schedule E category — so tax season is a printout, not an archaeology project.</p>
+    <div class="card">
+      <b>Add expense</b>
+      <div class="grid-form mt" style="margin-top:10px">
+        <div><label>Date</label><input type="date" id="exDate" value="${todayISO()}"></div>
+        <div><label>Unit</label><select id="exUnit">${unitOptions("", true)}</select></div>
+        <div><label>Schedule E category</label><select id="exCat">${categoryOptions()}</select></div>
+        <div><label>Payee</label><input id="exPayee" placeholder="e.g. Ace Plumbing"></div>
+        <div><label>Amount</label><input type="number" step="0.01" min="0" id="exAmount"></div>
+        <div><label>Note</label><input id="exNote"></div>
+        <div><button id="exAdd">Add expense</button></div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <label>Year</label><select id="fYear"><option value="">all</option>${years.map((y) => `<option ${y === expenseFilter.year ? "selected" : ""}>${y}</option>`).join("")}</select>
+      <label>Unit</label><select id="fUnit"><option value="">all</option>${state.units.map((u) => `<option value="${u.id}" ${u.id === expenseFilter.unit ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>
+      <label>Category</label><select id="fCat"><option value="">all</option>${SCHEDULE_E.map((c) => `<option ${c === expenseFilter.category ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
+      <span class="note">${list.length} entries · total <b>${money(total)}</b></span>
+    </div>
+    <div class="card"><table>
+      <tr><th>Date</th><th>Unit</th><th>Category</th><th>Payee / note</th><th class="num">Amount</th><th class="num noprint"></th></tr>
+      ${list.map((e) => `<tr><td>${esc(e.date)}</td><td>${esc(unitById(e.unitId)?.name || "shared")}</td><td>${esc(e.category)}</td><td>${esc(e.payee)}${e.note ? ` <span class="note">— ${esc(e.note)}</span>` : ""}</td><td class="num">${money(e.amount)}</td><td class="num noprint"><button class="mini ghost" data-del-exp="${e.id}">×</button></td></tr>`).join("") ||
+      `<tr><td colspan="6" class="empty">Nothing matches this filter.</td></tr>`}
+    </table></div>`;
+
+  document.getElementById("exAdd").addEventListener("click", () => {
+    const date = document.getElementById("exDate").value;
+    const amount = parseAmount(document.getElementById("exAmount").value);
+    if (!date || !amount) { alert("A date and a positive amount are required."); return; }
+    state.expenses.push({
+      id: uid(), date, unitId: document.getElementById("exUnit").value,
+      category: document.getElementById("exCat").value,
+      payee: document.getElementById("exPayee").value.trim(),
+      amount, note: document.getElementById("exNote").value.trim(),
+    });
+    save(); render();
+  });
+  const bind = (id, key) => document.getElementById(id).addEventListener("change", (ev) => { expenseFilter[key] = ev.target.value; render(); });
+  bind("fYear", "year"); bind("fUnit", "unit"); bind("fCat", "category");
+}
+
+/* ================= units tab ================= */
+let editingUnit = null;
+function renderUnits() {
+  const pro = isPro();
+  document.getElementById("tab-units").innerHTML = `
+    <h2>Properties & tenants</h2>
+    <p class="sub">One row per rentable unit. Rent amount and due day drive the whole ledger.</p>
+    ${!pro ? freePlanBanner() : ""}
+    ${licenseNotice ? `<div class="warn-note">${esc(licenseNotice)}</div>` : ""}
+    <div class="card">
+      <b>${editingUnit ? "Edit unit" : "Add a unit"}</b>
+      <div class="grid-form" style="margin-top:10px">
+        <div><label>Name</label><input id="uName" placeholder="Maple St · Apt 1" value="${esc(editingUnit?.name || "")}"></div>
+        <div><label>Address</label><input id="uAddr" placeholder="12 Maple St, Springfield" value="${esc(editingUnit?.address || "")}"></div>
+        <div><label>Tenant</label><input id="uTenant" placeholder="current tenant (optional)" value="${esc(editingUnit?.tenant || "")}"></div>
+        <div><label>Monthly rent</label><input type="number" step="0.01" min="0" id="uRent" value="${editingUnit ? editingUnit.rent : ""}"></div>
+        <div><label>Rent due day</label><input type="number" min="1" max="28" id="uDue" value="${editingUnit ? editingUnit.dueDay : 1}"></div>
+        <div><button id="uSave">${editingUnit ? "Save changes" : "Add unit"}</button> ${editingUnit ? `<button class="ghost" id="uCancel">Cancel</button>` : ""}</div>
+      </div>
+    </div>
+    <div class="card"><table>
+      <tr><th>Unit</th><th>Tenant</th><th class="num">Rent</th><th class="num">Due day</th><th class="num">Records</th><th class="num noprint"></th></tr>
+      ${state.units.map((u) => {
+        const recs = state.payments.filter((p) => p.unitId === u.id).length + state.expenses.filter((e) => e.unitId === u.id).length;
+        return `<tr><td><b>${esc(u.name)}</b><div class="note">${esc(u.address || "")}</div></td><td>${esc(u.tenant || "—")}</td><td class="num">${money(u.rent)}</td><td class="num">${u.dueDay}</td><td class="num">${recs}</td><td class="num noprint"><button class="mini ghost" data-edit-unit="${u.id}">Edit</button> <button class="mini danger" data-del-unit="${u.id}">Delete</button></td></tr>`;
+      }).join("") || `<tr><td colspan="6" class="empty">No units yet.</td></tr>`}
+    </table></div>`;
+
+  document.getElementById("uSave").addEventListener("click", () => {
+    const name = document.getElementById("uName").value.trim();
+    const rent = parseAmount(document.getElementById("uRent").value);
+    const dueDay = Math.min(28, Math.max(1, parseInt(document.getElementById("uDue").value, 10) || 1));
+    if (!name || !rent) { alert("Unit name and monthly rent are required."); return; }
+    if (!editingUnit && !isPro() && state.units.length >= LICENSE.maxFreeUnits) { showUpgrade(); return; }
+    const data = { name, address: document.getElementById("uAddr").value.trim(), tenant: document.getElementById("uTenant").value.trim(), rent, dueDay };
+    if (editingUnit) { Object.assign(unitById(editingUnit.id), data); }
+    else { state.units.push({ id: uid(), ...data }); }
+    editingUnit = null; save(); render();
+  });
+  const c = document.getElementById("uCancel");
+  if (c) c.addEventListener("click", () => { editingUnit = null; render(); });
+}
+
+/* ================= reports tab ================= */
+function renderReports() {
+  const r = reportFor(reportYear);
+  const anyUnit = state.units.length > 0;
+  document.getElementById("tab-reports").innerHTML = `
+    <h2>Tax report <span style="font-weight:400;font-size:14px;color:var(--muted)">— Schedule E-ready · ${esc(reportYear)}</span></h2>
+    <p class="sub">One column per unit, one row per Schedule E line — the same shape as IRS Form 1040 Schedule E, Part I. Print it for your preparer, or export CSV.</p>
+    <div class="toolbar noprint">
+      <label>Year</label><select id="rYear">${[...new Set([...state.payments, ...state.expenses].map((x) => x.date.slice(0, 4)))].sort().reverse().map((y) => `<option ${y === reportYear ? "selected" : ""}>${y}</option>`).join("")}</select>
+      <button class="ghost" onclick="window.print()">🖨 Print</button>
+      <button class="ghost" id="csvBtn">Export CSV</button>
+    </div>
+    <div class="card">${anyUnit ? `<table id="reportTable">
+      <tr><th>Line</th>${r.cols.map((c) => `<th class="num">${esc(c.name)}</th>`).join("")}<th class="num">Total</th></tr>
+      ${r.rows.filter((row) => !row.expense).map((row) => rowHTML(row, r)).join("")}
+      <tr class="total-row"><td>Gross income</td>${r.incomeTotal.map((v) => `<td class="num">${money(v)}</td>`).join("")}<td class="num">${money(r.incomeTotal.reduce((s, v) => s + v, 0))}</td></tr>
+      ${r.rows.filter((row) => row.expense).map((row) => rowHTML(row, r)).join("")}
+      <tr class="total-row"><td>Total expenses</td>${r.expenseTotal.map((v) => `<td class="num">${money(v)}</td>`).join("")}<td class="num">${money(r.expenseTotal.reduce((s, v) => s + v, 0))}</td></tr>
+      <tr class="total-row"><td>NET income (loss)</td>${r.colTotals.map((v) => `<td class="num">${money(v)}</td>`).join("")}<td class="num">${money(r.allTotal)}</td></tr>
+    </table><p class="note mt">Depreciation is claimed via Form 4562 and entered on Schedule E line 18 — add it with your preparer. The “Shared” column holds expenses not tied to a single unit (e.g. whole-building property tax); split them onto unit columns if your preparer asks.</p>` : `<div class="empty">Add a unit and some entries first.</div>`}</div>`;
+
+  function rowHTML(row, rep) {
+    const total = row.values.reduce((s, v) => s + v, 0);
+    if (!total && row.expense) return "";
+    return `<tr><td>${row.expense ? esc(row.label) : `<b>${esc(row.label)}</b>`}</td>${row.values.map((v) => `<td class="num">${v ? (row.expense ? "−" : "") + money(v) : "—"}</td>`).join("")}<td class="num">${total ? (row.expense ? "−" : "") + money(total) : "—"}</td></tr>`;
+  }
+  document.getElementById("rYear").addEventListener("change", (ev) => { reportYear = ev.target.value; render(); });
+  const csv = document.getElementById("csvBtn");
+  if (csv) csv.addEventListener("click", () => {
+    const r2 = reportFor(reportYear);
+    const lines = [["Line", ...r2.cols.map((c) => c.name), "Total"].join(",")];
+    for (const row of r2.rows) lines.push([`"${row.label}"`, ...row.values.map((v) => v.toFixed(2)), row.values.reduce((s, v) => s + v, 0).toFixed(2)].join(","));
+    lines.push(["Gross income", ...r2.incomeTotal.map((v) => v.toFixed(2)), r2.incomeTotal.reduce((s, v) => s + v, 0).toFixed(2)].join(","));
+    lines.push(["Total expenses", ...r2.expenseTotal.map((v) => v.toFixed(2)), r2.expenseTotal.reduce((s, v) => s + v, 0).toFixed(2)].join(","));
+    lines.push(["NET income", ...r2.colTotals.map((v) => v.toFixed(2)), r2.allTotal.toFixed(2)].join(","));
+    download(`rentbook-schedule-e-${reportYear}.csv`, lines.join("\n"), "text/csv");
+  });
+}
+
+/* ================= data tab ================= */
+function renderData() {
+  const lic = state.license;
+  document.getElementById("tab-data").innerHTML = `
+    <h2>Your data, your machine</h2>
+    <p class="sub">Everything lives in this browser's local storage. Nothing is uploaded — ever. Export a JSON backup regularly (e.g. to your Dropbox folder).</p>
+    ${licenseNotice ? `<div class="warn-note">${esc(licenseNotice)}</div>` : ""}
+    <div class="card">
+      <b>License</b>
+      ${lic ? `<p class="mt">✅ <b>RentBook Pro</b> activated ${esc(lic.activatedAt.slice(0, 10))} · code <code>${esc(lic.key)}</code></p>
+              <p class="note">Unlimited units, multi-year reports, tenant PDF statements. Verified against the license server when online; your ledger data never leaves this browser.</p>`
+            : `<div class="grid-form mt" style="margin-top:10px">
+                 <div><label>Have an activation code?</label><input id="licInput2" placeholder="AMZ-XXXX-XXXX-XXXX"></div>
+                 <div><label>&nbsp;</label><button id="licGo2">Activate</button></div>
+                 ${BUY_READY ? `<div><label>&nbsp;</label><a href="${LICENSE.buyUrl}" target="_blank" rel="noopener"><button class="ghost">Buy Pro · $24</button></a></div>` : ""}
+               </div>
+               <div class="form-msg" id="licMsg2"></div>
+               <p class="note mt">Free plan covers ${LICENSE.maxFreeUnits} units forever. Activation is verified online once — after that, everything works offline.</p>`}
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <button id="expJson">⬇ Export backup (JSON)</button>
+        <label class="ghost" style="border:1px solid var(--line);border-radius:8px;padding:7px 14px;cursor:pointer">⬆ Import backup<input type="file" id="impJson" accept=".json" style="display:none"></label>
+        <button id="seedBtn" class="ghost">Load demo data</button>
+        <button id="wipeBtn" class="danger">Wipe everything</button>
+      </div>
+      <div class="grid-form mt">
+        <div><label>Currency symbol</label><input id="cur" value="${esc(state.currency)}" maxlength="3" style="width:80px"></div>
+        <div><label>&nbsp;</label><button class="ghost" id="curSave">Apply</button></div>
+      </div>
+      <p class="note mt">${state.units.length} units · ${state.payments.length} payments · ${state.expenses.length} expenses stored locally.</p>
+    </div>`;
+  document.getElementById("expJson").addEventListener("click", () => {
+    download(`rentbook-backup-${todayISO()}.json`, JSON.stringify(state, null, 2), "application/json");
+  });
+  document.getElementById("impJson").addEventListener("change", (ev) => {
+    const f = ev.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const s = JSON.parse(reader.result);
+        if (!Array.isArray(s.units) || !Array.isArray(s.payments) || !Array.isArray(s.expenses)) throw new Error("bad shape");
+        if (!s.license || !s.license.key) s.license = state.license; // 备份缺授权时保留当前激活
+        state = s; save(); render(); alert("Backup restored.");
+      } catch (e) { alert("That file doesn't look like a RentBook backup."); }
+    };
+    reader.readAsText(f);
+  });
+  document.getElementById("seedBtn").addEventListener("click", () => {
+    if (confirm("Replace current data with demo data?")) {
+      const keepLicense = state.license;
+      state = seed();
+      state.license = keepLicense; // 授权不随演示数据重置
+      save(); render();
+    }
+  });
+  const licBtn = document.getElementById("licGo2");
+  if (licBtn) licBtn.addEventListener("click", async () => {
+    const msg = document.getElementById("licMsg2");
+    msg.className = "form-msg"; msg.textContent = "Contacting license server…";
+    const res = await activateLicense(document.getElementById("licInput2").value);
+    msg.className = "form-msg " + (res.ok ? "ok" : "err");
+    msg.textContent = res.msg;
+    if (res.ok) setTimeout(render, 700);
+  });
+  document.getElementById("wipeBtn").addEventListener("click", (ev) => {
+    if (ev.target.dataset.armed) {
+      // 清空的是记账数据；激活状态属于授权，不随数据清除
+      state = { version: 1, currency: "$", units: [], payments: [], expenses: [], license: state.license };
+      delete ev.target.dataset.armed; ev.target.textContent = "Wipe everything";
+      save(); render();
+    } else {
+      ev.target.dataset.armed = "1"; ev.target.textContent = "Click again to confirm wipe";
+      setTimeout(() => { delete ev.target.dataset.armed; ev.target.textContent = "Wipe everything"; }, 3000);
+    }
+  });
+  document.getElementById("curSave").addEventListener("click", () => {
+    state.currency = document.getElementById("cur").value || "$"; save(); render();
+  });
+}
+
+/* ================= events & boot ================= */
+function download(filename, content, mime) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function switchTab(t) { currentTab = t; openPayForm = null; render(); }
+function render() {
+  document.getElementById("nav").innerHTML = TABS.map(([id, label]) =>
+    `<button class="${id === currentTab ? "on" : ""}" data-tab="${id}">${label}</button>`).join("");
+  TABS.forEach(([id]) => document.getElementById("tab-" + id).hidden = id !== currentTab);
+  ({ dashboard: renderDashboard, rent: renderRent, expenses: renderExpenses, units: renderUnits, reports: renderReports, data: renderData })[currentTab]();
+  save();
+}
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest("button");
+  if (!t) return;
+  if (t.dataset.tab) return switchTab(t.dataset.tab);
+  if (t.dataset.upgrade) { ev.preventDefault(); return showUpgrade(); }
+  if (t.dataset.pay) { openPayForm = openPayForm === t.dataset.pay ? null : t.dataset.pay; return render(); }
+  if (t.dataset.cancelPay) { openPayForm = null; return render(); }
+  if (t.dataset.savePay) {
+    const form = document.querySelector(`[data-form="${t.dataset.savePay}"]`);
+    const get = (k) => form.querySelector(`[data-f="${k}"]`).value;
+    const amount = parseAmount(get("amount"));
+    if (!amount) { alert("Enter a positive amount."); return; }
+    const date = get("date") || todayISO();
+    if (date.slice(0, 7) !== rentMonth) { alert(`The payment date must fall within the ledger month (${monthLabel(rentMonth)}). Switch the month first or pick another date.`); return; }
+    state.payments.push({ id: uid(), unitId: t.dataset.savePay, month: rentMonth, kind: get("kind"), amount, date, method: get("method").trim(), note: get("note").trim() });
+    openPayForm = null; save(); return render();
+  }
+  if (t.dataset.delPay) {
+    if (confirm("Delete this payment entry?")) { state.payments = state.payments.filter((p) => p.id !== t.dataset.delPay); save(); return render(); }
+  }
+  if (t.dataset.delExp) {
+    if (confirm("Delete this expense?")) { state.expenses = state.expenses.filter((e) => e.id !== t.dataset.delExp); save(); return render(); }
+  }
+  if (t.dataset.editUnit) { editingUnit = unitById(t.dataset.editUnit); return render(); }
+  if (t.dataset.delUnit) {
+    const u = unitById(t.dataset.delUnit);
+    const n = state.payments.filter((p) => p.unitId === u.id).length + state.expenses.filter((e) => e.unitId === u.id).length;
+    if (confirm(`Delete “${u.name}”${n ? ` and its ${n} ledger entries` : ""}? This cannot be undone.`)) {
+      state.units = state.units.filter((x) => x.id !== u.id);
+      state.payments = state.payments.filter((p) => p.unitId !== u.id);
+      state.expenses = state.expenses.filter((e) => e.unitId !== u.id);
+      save(); return render();
+    }
+  }
+});
+render();
+updateProBadge();
+if (state.license) revalidateLicense();
+</script>
+</body>
+</html>
