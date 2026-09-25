@@ -132,22 +132,39 @@ function creemSignatureOk(raw, given) {
  * 异常只记日志：Creem 对失败投递按 30s/1m/5m/1h 重试，配合订单号幂等不会重复发码
  */
 async function fulfillCreemOrder(raw) {
+  // 捕获原始报文（Creem 2.0 迁移后格式待实证，先落库供核对；限制 8KB 防滥用）
+  try {
+    await store.prepare(
+      "INSERT INTO app_config (key, value) VALUES ('last_webhook_raw', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value"
+    ).run(String(raw).slice(0, 8192));
+  } catch (e) { /* 捕获失败不影响主流程 */ }
+
   let evt;
   try { evt = JSON.parse(raw); } catch (e) { return; }
-  const obj = (evt && evt.object) || {};
-  const orderId = obj.order && typeof obj.order.id === 'string' ? obj.order.id : '';
+  // 兼容两种事件名字段（1.0: eventType；2.0: meta.event_name）
+  const eventType = evt.eventType || (evt.meta && evt.meta.event_name) || '';
+  const obj = evt.object || evt.data || {};
+  // 订单号解析：1.0 形态 obj.order.id 优先；2.0 形态 data.id / attributes.order_id 兜底
+  const orderId = (obj.order && typeof obj.order.id === 'string' ? obj.order.id : '') ||
+    (typeof obj.id === 'string' && obj.id) ||
+    (obj.attributes && typeof obj.attributes.order_id !== 'undefined' ? String(obj.attributes.order_id) : '');
   if (!/^[A-Za-z0-9_-]{6,64}$/.test(orderId)) return;
 
-  if (evt.eventType === 'checkout.completed') {
+  if (/checkout\.completed/i.test(eventType)) {
     if (await store.getOrder(orderId)) return; // 同一订单重复投递，直接跳过
-    const email = obj.customer && typeof obj.customer.email === 'string' ? obj.customer.email : '';
-    const clean = (s) => s.replace(/[^ -~]/g, ' ').slice(0, 200); // 入库前只保留可打印 ASCII
-    const key = generateKey();
+    const email = (obj.customer && obj.customer.email) || (obj.attributes && obj.attributes.customer_email) || '';
+    const clean = (s) => String(s).replace(/[^ -~]/g, ' ').slice(0, 200); // 入库前只保留可打印 ASCII
+    // 优先采用 Creem 原生许可证（商品启用了 license key 交付，客户邮箱收到的是它）
+    const payloadKey =
+      (obj.license_key && typeof obj.license_key === 'object' && obj.license_key.key) ||
+      (obj.attributes && obj.attributes.license_key && typeof obj.attributes.license_key === 'object' ? obj.attributes.license_key.key : null) ||
+      (evt.data && evt.data.attributes && evt.data.attributes.license_key && evt.data.attributes.license_key.key) || null;
+    const key = payloadKey || generateKey();
     await store.createLicense(key, clean('creem ' + orderId + ' ' + email), 3);
     await store.createOrder(orderId, key, clean(email));
-  } else if (evt.eventType === 'refund.created') {
+  } else if (/refund/i.test(eventType)) {
     const order = await store.getOrder(orderId);
-    if (order && isValidKeyFormat(order.license_key)) await store.revokeLicense(order.license_key);
+    if (order) await store.revokeLicense(order.license_key);
   }
 }
 
