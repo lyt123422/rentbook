@@ -35,8 +35,9 @@ const DB_PATH     = process.env.DB_PATH || './amzinsight.db';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const TRIAL_LIMIT = Math.max(0, parseInt(process.env.TRIAL_LIMIT || '3', 10));
 const RATE_LIMIT  = Math.max(1, parseInt(process.env.RATE_LIMIT || '60', 10));
-// Creem webhook 验签密钥（Dashboard > Developers > Webhook 页获取；不配置则自动发码不可用）
+// Creem webhook 验签密钥：优先读数据库 app_config（可在不重启的情况下更新），回退到环境变量
 const CREEM_WEBHOOK_SECRET = process.env.CREEM_WEBHOOK_SECRET || '';
+let CREEM_SECRET_OVERRIDE = '';
 // Postgres 云数据库：配置了 DATABASE_URL 就走云库（数据持久不随容器重启丢失），
 // 否则退回 node:sqlite 本地文件
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -117,8 +118,9 @@ function readRawBody(req) {
 
 /** Creem webhook 验签：creem-signature = HMAC-SHA256(rawBody, secret) 的 hex */
 function creemSignatureOk(raw, given) {
-  if (!CREEM_WEBHOOK_SECRET || typeof given !== 'string') return false;
-  const expected = crypto.createHmac('sha256', CREEM_WEBHOOK_SECRET).update(raw).digest('hex');
+  const secret = CREEM_SECRET_OVERRIDE || CREEM_WEBHOOK_SECRET;
+  if (!secret || typeof given !== 'string') return false;
+  const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
   const a = Buffer.from(expected.toLowerCase());
   const b = Buffer.from(String(given).trim().toLowerCase());
   return a.length === b.length && crypto.timingSafeEqual(a, b);
@@ -156,11 +158,14 @@ function adminOk(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-/** installId / licenseKey 的合法性检查，不合法直接 400 */
+/** installId / licenseKey 的合法性检查，不合法直接 400。
+ *  key 格式兼容两种来源：AMZ-XXXX-XXXX-XXXX（手动铸码）与
+ *  Lemon Squeezy 自动发码（UUID 风格，长短不一）——统一放宽为字母数字连字符 10~100 位 */
 function validIdentifiers(body, { requireLicense = false } = {}) {
+  const GENERIC_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9-]{9,99}$/;
   if (!UUID_RE.test(body.installId || '')) return false;
-  if (requireLicense && !isValidKeyFormat(body.licenseKey)) return false;
-  if (body.licenseKey != null && body.licenseKey !== '' && !isValidKeyFormat(body.licenseKey)) return false;
+  if (requireLicense && !(isValidKeyFormat(body.licenseKey) || GENERIC_KEY_RE.test(body.licenseKey))) return false;
+  if (body.licenseKey != null && body.licenseKey !== '' && !(isValidKeyFormat(body.licenseKey) || GENERIC_KEY_RE.test(body.licenseKey))) return false;
   return true;
 }
 
@@ -201,6 +206,7 @@ async function handle(req, res) {
 
   // 等数据层建表完成（首次启动时执行）
   await store.ready;
+try { const v = await store.getConfig('creem_webhook_secret'); if (v) { CREEM_SECRET_OVERRIDE = v; console.log('[creem] 签名密钥已从数据库加载'); } } catch (e) { /* 配置缺失用环境变量 */ }
 
   // 浏览器跨域预检
   if (method === 'OPTIONS') {
@@ -275,7 +281,7 @@ async function handle(req, res) {
 
   // ── Creem 自动发码 webhook ──
   if (method === 'POST' && path === '/v1/webhook/creem') {
-    if (!CREEM_WEBHOOK_SECRET) return sendJson(res, 503, { error: 'webhook_not_configured' });
+    if (!(CREEM_SECRET_OVERRIDE || CREEM_WEBHOOK_SECRET)) return sendJson(res, 503, { error: 'webhook_not_configured' });
     const raw = await readRawBody(req);
     if (!creemSignatureOk(raw, req.headers['creem-signature'])) {
       return sendJson(res, 401, { error: 'invalid_signature' });

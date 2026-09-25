@@ -79,9 +79,12 @@ test('生成激活码：数量正确且格式合法', async () => {
 test('参数校验：非法 installId / 非法激活码格式返回 400', async () => {
   const badInstall = await post('/v1/consume', { installId: 'not-a-uuid' });
   assert.equal(badInstall.status, 400);
-  // 1111/2222 等含被排除字符（0/1/I/O），格式校验应拒绝
-  const badKey = await post('/v1/activate', { licenseKey: 'AMZ-1111-2222-3333', installId: uuid() });
-  assert.equal(badKey.status, 400);
+  // 含非法字符（+、空格）的 key 在格式层拒绝
+  const badChars = await post('/v1/activate', { licenseKey: 'KEY WITH SPACES+PLUS', installId: uuid() });
+  assert.equal(badChars.status, 400);
+  // 格式合法但数据库中不存在的 key（含被排除字符 0/1）→ 404
+  const unknown = await post('/v1/activate', { licenseKey: 'AMZ-1111-2222-3333', installId: uuid() });
+  assert.equal(unknown.status, 404);
 });
 
 test('免费试用：3 次后拒绝，status 与 consume 一致', async () => {

@@ -14,6 +14,8 @@ const TABLES = [
   "CREATE TABLE IF NOT EXISTS usage (install_id TEXT PRIMARY KEY, used INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)",
   // 支付订单 → 激活码 映射（webhook 自动发码用；order_id 即客户取码凭据）
   "CREATE TABLE IF NOT EXISTS orders (order_id TEXT PRIMARY KEY, license_key TEXT NOT NULL, customer_email TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)",
+  // 运行时配置（webhook 密钥等）——避免依赖 Render 环境变量编辑
+  "CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
 ];
 const SQLITE_SCHEMA = TABLES.map((t) => t.replace('{PK}', 'INTEGER PRIMARY KEY AUTOINCREMENT'));
 const PG_SCHEMA = TABLES.map((t) => t.replace('{PK}', 'SERIAL PRIMARY KEY'));
@@ -196,6 +198,12 @@ class Store {
   async close() {
     if (this.sql) { try { await this.sql.end({ timeout: 1 }); } catch (e) { /* 忽略 */ } }
     else { try { this.db.close(); } catch (e) { /* 忽略 */ } }
+  }
+
+  /** 读运行时配置（app_config 表；两个后端通用） */
+  async getConfig(key) {
+    const row = await this.prepare('SELECT value FROM app_config WHERE key = ?').get(key);
+    return row ? row.value : null;
   }
 }
 
