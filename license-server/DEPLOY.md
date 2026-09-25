@@ -37,6 +37,11 @@
 
 ## 3. Creem 配置（5 分钟）
 
+> ⚠️ 2026-09 起 Creem 2.0 控制台入口是 www.creem.io/dashboard（旧 dashboard.creem.io 已废弃）。
+> Webhook 签名密钥由 Creem 生成（Webhook 详情页点「显示」），需同步写入本服务的 Supabase 表：
+> INSERT INTO app_config (key, value) VALUES (`creem_webhook_secret`, `<whsec_...>`);
+> （服务器每次请求都会读它，改完即时生效，无需重启。）
+
 1. Creem 后台 → Products → 新建 **RentBook Pro**：$24，one-time。
 2. Webhooks → 新建，URL = `https://<app>.onrender.com/v1/webhook/creem`，
    Secret = Render 控制台里的 `CREEM_WEBHOOK_SECRET` 值。
