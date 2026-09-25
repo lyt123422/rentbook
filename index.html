@@ -115,7 +115,7 @@ const MONTH_NAMES = ["January","February","March","April","May","June","July","A
  * 激活只联网一次（复用 amz-insight 授权服务器，CORS 已放开）；
  * 记账数据永远只存在本地，离线时保留已激活状态。 */
 const LICENSE = {
-  server: "",                       // 上线前替换为你的授权服务器部署地址
+  server: "https://rentbook-license-server.onrender.com",                       // 上线前替换为你的授权服务器部署地址
   buyUrl: "",    // Creem 商品创建后替换为真实支付链接
   maxFreeUnits: 3,
 };
